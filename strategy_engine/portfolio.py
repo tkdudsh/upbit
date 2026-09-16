@@ -11,6 +11,18 @@ class Position:
         return len(self.entries) - 1
 
     @property
+    def entry_price(self) -> float:
+        """The original, first-round entry price — never recomputed.
+
+        The averaging ladder measures its -10%/-20%/-30% steps against this
+        fixed reference. Using avg_price there would measure each step against
+        a target that add_to_position has already pulled down, so the ladder
+        would drift to roughly -10%/-24%/-39%. Take-profit deliberately still
+        uses avg_price (spec: "+5% 익절: 평균매수가 대비").
+        """
+        return self.entries[0]["price"]
+
+    @property
     def total_qty(self) -> float:
         return sum(e["qty"] for e in self.entries)
 

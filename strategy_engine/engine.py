@@ -35,7 +35,11 @@ def run_daily_cycle(
         df = market_data[market]
         position = portfolio.positions[market]
         current_price = df["close"].iloc[-1]
-        if averaging_allowed(df, btc_df, position.avg_price, current_price, position.rounds_used):
+        # entry_price, not avg_price: the ladder's -10%/-20%/-30% steps must be
+        # measured against a fixed reference. avg_price moves down after every
+        # round, so each threshold would be checked against an already-lowered
+        # target and the ladder would overshoot its documented -30% envelope.
+        if averaging_allowed(df, btc_df, position.entry_price, current_price, position.rounds_used):
             portfolio.add_to_position(market, current_price, trade_date)
             averaged_any = True
             actions.append({"type": "averaging", "market": market})
