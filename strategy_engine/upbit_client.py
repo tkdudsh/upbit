@@ -44,6 +44,18 @@ def get_daily_candles(market: str, count: int, to: str | None = None) -> pd.Data
         "tradePrice": "close",
         "candleAccTradeVolume": "volume",
     })
-    df["date"] = pd.to_datetime(df["date"].str[:10])
+    # NOTE: The brief specifies `pd.to_datetime(df["date"]).dt.normalize()`.
+    # On this environment (Windows, pandas 3.0.4, numpy 2.2.6), that call
+    # reliably segfaults with a Windows access violation inside
+    # pandas/core/arrays/datetimelike.py `_with_freq` (called from
+    # `DatetimeArray.normalize`) for datetime64[us] series of length >= 3.
+    # `.dt.floor("D")` was tried as an alternative and crashes identically
+    # (same `_with_freq`/`_round` code path). See task-2-report.md for the
+    # full repro, traceback, and version info.
+    # `pd.to_datetime(...).dt.date` followed by `pd.to_datetime(...)` avoids
+    # that code path entirely (it round-trips through Python `date` objects
+    # instead of calling the buggy array-level freq/rounding machinery) and
+    # is behaviorally equivalent: it truncates each timestamp to midnight.
+    df["date"] = pd.to_datetime(pd.to_datetime(df["date"]).dt.date)
     df = df.set_index("date").sort_index()
     return df[["open", "high", "low", "close", "volume"]]
