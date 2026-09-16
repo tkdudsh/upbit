@@ -1,7 +1,16 @@
 from unittest.mock import patch, MagicMock
+import pytest
+import requests
 from strategy_engine import upbit_client
 import pandas as pd
 import datetime
+
+
+def _throttled_resp(status_code=429):
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.raise_for_status.side_effect = requests.HTTPError(f"{status_code}")
+    return resp
 
 
 @patch("strategy_engine.upbit_client.requests.get")
@@ -146,3 +155,97 @@ def test_get_daily_candles_dedups_overlapping_page_boundary(mock_get):
     # 200 + 50 raw rows, one of which is a duplicate date -> 249 unique days
     assert len(df) == 249
     assert df.index.is_monotonic_increasing
+
+
+@patch("strategy_engine.upbit_client.requests.get")
+def test_get_daily_candles_empty_response_returns_empty_shaped_frame(mock_get):
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = []
+    mock_resp.raise_for_status.return_value = None
+    mock_get.return_value = mock_resp
+
+    df = upbit_client.get_daily_candles("KRW-NOPE", count=10)
+
+    assert df.empty
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+    assert df.index.name == "date"
+    assert isinstance(df.index, pd.DatetimeIndex)
+
+
+@patch("strategy_engine.upbit_client.time.sleep")
+@patch("strategy_engine.upbit_client.requests.get")
+def test_get_daily_candles_retries_a_transient_429(mock_get, mock_sleep):
+    ok = MagicMock()
+    ok.json.return_value = [_candle("2024-01-01T09:00:00", 100, 105, 98, 101, 400)]
+    ok.raise_for_status.return_value = None
+    ok.status_code = 200
+    mock_get.side_effect = [_throttled_resp(429), ok]
+
+    df = upbit_client.get_daily_candles("KRW-ETH", count=1)
+
+    assert mock_get.call_count == 2
+    assert len(df) == 1
+    assert df["close"].iloc[0] == 101
+    mock_sleep.assert_any_call(1)  # 2 ** 0 backoff
+
+
+@patch("strategy_engine.upbit_client.time.sleep")
+@patch("strategy_engine.upbit_client.requests.get")
+def test_get_krw_markets_retries_a_transient_503(mock_get, mock_sleep):
+    ok = MagicMock()
+    ok.json.return_value = [{"market": "KRW-ETH"}, {"market": "KRW-BTC"}]
+    ok.raise_for_status.return_value = None
+    ok.status_code = 200
+    mock_get.side_effect = [_throttled_resp(503), ok]
+
+    assert upbit_client.get_krw_markets() == ["KRW-ETH"]
+    assert mock_get.call_count == 2
+
+
+@patch("strategy_engine.upbit_client.time.sleep")
+@patch("strategy_engine.upbit_client.requests.get")
+def test_non_retryable_status_is_raised_immediately(mock_get, mock_sleep):
+    mock_get.side_effect = [_throttled_resp(404)]
+
+    with pytest.raises(requests.HTTPError):
+        upbit_client.get_krw_markets()
+
+    assert mock_get.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("strategy_engine.upbit_client.time.sleep")
+@patch("strategy_engine.upbit_client.requests.get")
+def test_persistent_429_gives_up_after_max_retries(mock_get, mock_sleep):
+    mock_get.side_effect = [_throttled_resp(429) for _ in range(upbit_client.MAX_RETRIES)]
+
+    with pytest.raises(requests.HTTPError):
+        upbit_client.get_krw_markets()
+
+    assert mock_get.call_count == upbit_client.MAX_RETRIES
+
+
+@patch("strategy_engine.upbit_client.time.sleep")
+@patch("strategy_engine.upbit_client.requests.get")
+def test_get_daily_candles_paces_requests_between_pages(mock_get, mock_sleep):
+    base = datetime.date(2024, 1, 1)
+    all_dates_desc = [base + datetime.timedelta(days=i) for i in range(250)][::-1]
+    resp1, resp2 = MagicMock(), MagicMock()
+    resp1.json.return_value = [
+        _candle(d.isoformat() + "T09:00:00", 1, 1, 1, i, 1)
+        for i, d in enumerate(all_dates_desc[:200])
+    ]
+    resp1.raise_for_status.return_value = None
+    resp2.json.return_value = [
+        _candle(d.isoformat() + "T09:00:00", 1, 1, 1, i, 1)
+        for i, d in enumerate(all_dates_desc[200:250])
+    ]
+    resp2.raise_for_status.return_value = None
+    mock_get.side_effect = [resp1, resp2]
+
+    upbit_client.get_daily_candles("KRW-ETH", count=250)
+
+    # no delay before the first page, one before the second
+    assert mock_sleep.call_args_list == [
+        ((upbit_client.PAGE_DELAY_SECONDS,), {}),
+    ]

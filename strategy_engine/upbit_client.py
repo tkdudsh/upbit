@@ -1,12 +1,35 @@
+import time
+
 import requests
 import pandas as pd
 
 UPBIT_BASE_URL = "https://api.upbit.com/v1"
 
+# Upbit throttles public REST calls per-IP and returns 429 when exceeded; 5xx
+# also shows up transiently. Fetching a few hundred markets x 2 pages each is
+# well into that territory, so pace the requests and retry the retryable codes.
+RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
+MAX_RETRIES = 3
+PAGE_DELAY_SECONDS = 0.1
+
+
+def _get(url: str, params: dict) -> requests.Response:
+    """GET with a small bounded retry + exponential backoff on 429/5xx."""
+    for attempt in range(MAX_RETRIES):
+        resp = requests.get(url, params=params)
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError:
+            if resp.status_code in RETRY_STATUS_CODES and attempt < MAX_RETRIES - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
+        return resp
+    return resp
+
 
 def get_krw_markets() -> list[str]:
-    resp = requests.get(f"{UPBIT_BASE_URL}/market/all", params={"isDetails": "false"})
-    resp.raise_for_status()
+    resp = _get(f"{UPBIT_BASE_URL}/market/all", params={"isDetails": "false"})
     data = resp.json()
     return [
         m["market"] for m in data
@@ -18,14 +41,17 @@ def get_daily_candles(market: str, count: int, to: str | None = None) -> pd.Data
     rows = []
     remaining = count
     cursor = to
+    first_page = True
 
     while remaining > 0:
+        if not first_page:
+            time.sleep(PAGE_DELAY_SECONDS)
+        first_page = False
         batch_size = min(remaining, 200)
         params = {"market": market, "count": batch_size}
         if cursor:
             params["to"] = cursor
-        resp = requests.get(f"{UPBIT_BASE_URL}/candles/days", params=params)
-        resp.raise_for_status()
+        resp = _get(f"{UPBIT_BASE_URL}/candles/days", params=params)
         batch = resp.json()
         if not batch:
             break
@@ -39,6 +65,16 @@ def get_daily_candles(market: str, count: int, to: str | None = None) -> pd.Data
         cursor = batch[-1]["candle_date_time_utc"]
         if len(batch) < batch_size:
             break
+
+    if not rows:
+        # An unknown market code or a market with zero history returns []. A
+        # bare pd.DataFrame([]) has no columns, so df["date"] below would raise
+        # an opaque KeyError: 'date'. Return the right shape instead so callers
+        # see an ordinary empty frame.
+        return pd.DataFrame(
+            columns=["open", "high", "low", "close", "volume"],
+            index=pd.DatetimeIndex([], name="date"),
+        )
 
     df = pd.DataFrame(rows)
     # NOTE: Upbit's `/v1/candles/days` response uses snake_case field names
