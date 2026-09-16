@@ -31,7 +31,12 @@ def get_daily_candles(market: str, count: int, to: str | None = None) -> pd.Data
             break
         rows.extend(batch)
         remaining -= len(batch)
-        cursor = batch[-1]["candle_date_time_kst"]
+        # Upbit interprets the `to` query param as a UTC timestamp, so the
+        # cursor must come from `candle_date_time_utc`. Using the KST field
+        # (9 hours ahead) makes the next page start 9 hours "late", which on a
+        # daily candle series re-returns the boundary candle: verified live, a
+        # 394-row request came back with 393 unique dates and 2026-03-01 twice.
+        cursor = batch[-1]["candle_date_time_utc"]
         if len(batch) < batch_size:
             break
 
@@ -65,4 +70,8 @@ def get_daily_candles(market: str, count: int, to: str | None = None) -> pd.Data
     # is behaviorally equivalent: it truncates each timestamp to midnight.
     df["date"] = pd.to_datetime(pd.to_datetime(df["date"]).dt.date)
     df = df.set_index("date").sort_index()
+    # Belt-and-braces: even with a correct cursor, any pagination overlap would
+    # silently double-count a day in every downstream indicator. Keep the first
+    # (chronologically earliest-fetched) occurrence of each date.
+    df = df[~df.index.duplicated(keep="first")]
     return df[["open", "high", "low", "close", "volume"]]
