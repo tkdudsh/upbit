@@ -1054,9 +1054,13 @@ def has_reached_step(
 
 
 def is_support_alive(df: pd.DataFrame, band: float = config.SUPPORT_SURVIVAL_BAND) -> bool:
+    # Compare against the prior bar's rolling low, not the current bar's —
+    # indicators.rolling_low's window includes the current row, so low.iloc[-1]
+    # always includes current_price itself, making a newly-set low trivially
+    # "within band" of itself. Mirrors is_capitulation's avg_volume.iloc[-2] below.
     low = indicators.rolling_low(df["close"], config.SUPPORT_LOOKBACK_DAYS)
     current = df["close"].iloc[-1]
-    return bool(current >= low.iloc[-1] * (1 - band))
+    return bool(current >= low.iloc[-2] * (1 - band))
 
 
 def is_capitulation(df: pd.DataFrame) -> bool:
