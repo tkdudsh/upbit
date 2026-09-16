@@ -6,8 +6,14 @@ from strategy_engine.engine import run_daily_cycle
 from strategy_engine.backtest.metrics import compute_metrics
 
 
-def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) -> dict:
-    portfolio = Portfolio(position_size_krw=config.POSITION_SIZE_KRW)
+def run_backtest(
+    btc_df: pd.DataFrame,
+    market_data: dict,
+    start_date,
+    end_date,
+    initial_cash: float | None = config.INITIAL_CASH_KRW,
+) -> dict:
+    portfolio = Portfolio(position_size_krw=config.POSITION_SIZE_KRW, initial_cash=initial_cash)
     all_actions = []
 
     dates = [d for d in btc_df.index if start_date <= d <= end_date]
@@ -43,6 +49,25 @@ def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) 
         if market in portfolio.positions
     }
 
+    # Per-position breakdown of what's still open — rounds_used tells you how
+    # many averaging-down buys (beyond the initial entry) went into it, and
+    # cost_basis vs current_price shows whether the loss is from the entry
+    # itself or piled up through averaging into a coin that kept falling.
+    open_detail = []
+    for market, position in portfolio.positions.items():
+        current_price = final_prices.get(market)
+        cost_basis = position.avg_price * position.total_qty
+        open_detail.append({
+            "market": market,
+            "rounds_used": position.rounds_used,
+            "entry_price": position.entry_price,
+            "avg_price": position.avg_price,
+            "qty": position.total_qty,
+            "cost_basis": cost_basis,
+            "current_price": current_price,
+            "unrealized_pnl": (current_price - position.avg_price) * position.total_qty if current_price is not None else None,
+        })
+
     return {
         "actions": all_actions,
         "metrics": compute_metrics(
@@ -51,4 +76,6 @@ def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) 
             current_prices=final_prices,
         ),
         "open_positions": list(portfolio.positions.keys()),
+        "open_detail": open_detail,
+        "final_cash": portfolio.cash,
     }

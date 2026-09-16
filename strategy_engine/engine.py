@@ -46,6 +46,8 @@ def run_daily_cycle(
         # measured against a fixed reference. avg_price moves down after every
         # round, so each threshold would be checked against an already-lowered
         # target and the ladder would overshoot its documented -30% envelope.
+        if not portfolio.can_afford():
+            continue
         if averaging_allowed(df, btc_df, position.entry_price, current_price, position.rounds_used):
             portfolio.add_to_position(market, current_price, trade_date)
             averaged_any = True
@@ -56,6 +58,8 @@ def run_daily_cycle(
             if portfolio.is_held(market):
                 continue
             if market in closed_this_cycle:
+                continue
+            if not portfolio.can_afford():
                 continue
             if entry_allowed(df):
                 current_price = df["close"].iloc[-1]

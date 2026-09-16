@@ -120,3 +120,36 @@ def test_no_danger_warning_when_individual_trend_is_fine():
         actions = engine.run_daily_cycle(portfolio, market_data, _df(), trade_date="d1")
 
     assert actions == []
+
+
+def test_no_new_entry_when_cash_is_exhausted():
+    portfolio = Portfolio(position_size_krw=15_000, initial_cash=10_000)  # can't afford one more buy
+    market_data = {"KRW-ETH": _df()}
+
+    with patch("strategy_engine.engine.is_take_profit", return_value=False), \
+         patch("strategy_engine.engine.averaging_allowed", return_value=False), \
+         patch("strategy_engine.engine.entry_allowed", return_value=True) as mock_entry:
+        actions = engine.run_daily_cycle(portfolio, market_data, _df(), trade_date="d1")
+
+    assert portfolio.is_held("KRW-ETH") is False
+    mock_entry.assert_not_called()
+    assert actions == []
+
+
+def test_no_averaging_when_cash_is_exhausted():
+    from strategy_engine.portfolio import Position
+
+    portfolio = Portfolio(position_size_krw=15_000, initial_cash=10_000)
+    # Insert the held position directly (bypassing open_position) so cash isn't
+    # spent twice — we only care that cash is already below position_size_krw.
+    portfolio.positions["KRW-ETH"] = Position(market="KRW-ETH", entries=[{"date": "d0", "price": 1000, "qty": 15}])
+    market_data = {"KRW-ETH": _df()}
+
+    with patch("strategy_engine.engine.is_take_profit", return_value=False), \
+         patch("strategy_engine.engine.averaging_allowed", return_value=True) as mock_averaging, \
+         patch("strategy_engine.engine.entry_allowed", return_value=False):
+        actions = engine.run_daily_cycle(portfolio, market_data, _df(), trade_date="d1")
+
+    assert portfolio.positions["KRW-ETH"].rounds_used == 0  # no averaging round added
+    mock_averaging.assert_not_called()
+    assert actions == []

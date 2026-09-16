@@ -42,6 +42,6 @@ TAKE_PROFIT_PCT = 0.05
 # not modelled separately; widen this constant to approximate it.
 FEE_RATE = 0.0005
 
-# --- Backtest position sizing (percentage-based strategy, so this only scales
-# reported KRW P&L, not returns) ---
-POSITION_SIZE_KRW = 100_000
+# --- Backtest position sizing ---
+POSITION_SIZE_KRW = 15_000
+INITIAL_CASH_KRW = 100_000

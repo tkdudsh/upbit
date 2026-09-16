@@ -52,24 +52,34 @@ class ClosedTrade:
 
 
 class Portfolio:
-    def __init__(self, position_size_krw: float):
+    def __init__(self, position_size_krw: float, initial_cash: float | None = None):
+        """`initial_cash=None` means unconstrained (unlimited capital) — the
+        original backtest assumption. Pass a real number to make the engine
+        naturally skip new entries/averaging rounds once cash runs out."""
         self.position_size_krw = position_size_krw
+        self.cash = initial_cash if initial_cash is not None else float("inf")
         self.positions: dict[str, Position] = {}
         self.closed_trades: list[ClosedTrade] = []
 
     def is_held(self, market: str) -> bool:
         return market in self.positions
 
+    def can_afford(self) -> bool:
+        return self.cash >= self.position_size_krw
+
     def open_position(self, market: str, price: float, trade_date) -> None:
         qty = self.position_size_krw / price
+        self.cash -= self.position_size_krw
         self.positions[market] = Position(market=market, entries=[{"date": trade_date, "price": price, "qty": qty}])
 
     def add_to_position(self, market: str, price: float, trade_date) -> None:
         qty = self.position_size_krw / price
+        self.cash -= self.position_size_krw
         self.positions[market].entries.append({"date": trade_date, "price": price, "qty": qty})
 
     def close_position(self, market: str, price: float, trade_date) -> ClosedTrade:
         position = self.positions.pop(market)
+        self.cash += price * position.total_qty
         trade = ClosedTrade(
             market=market,
             avg_price=position.avg_price,

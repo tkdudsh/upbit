@@ -81,3 +81,37 @@ def test_pnl_can_be_negative_purely_from_fees():
         entry_date="d0", exit_date="d1",
     )
     assert trade.pnl == pytest.approx(-(200000 * 0.0005))
+
+
+def test_cash_is_unconstrained_by_default():
+    p = Portfolio(position_size_krw=15_000)
+    assert p.cash == float("inf")
+    assert p.can_afford() is True
+    for i in range(50):
+        p.open_position(f"KRW-COIN{i}", price=1000, trade_date="2024-01-01")
+    assert p.can_afford() is True
+
+
+def test_cash_decreases_on_open_and_add_increases_on_close():
+    p = Portfolio(position_size_krw=15_000, initial_cash=100_000)
+    assert p.cash == 100_000
+
+    p.open_position("KRW-ETH", price=1000, trade_date="2024-01-01")
+    assert p.cash == pytest.approx(85_000)
+
+    p.add_to_position("KRW-ETH", price=900, trade_date="2024-01-02")
+    assert p.cash == pytest.approx(70_000)
+
+    position = p.positions["KRW-ETH"]
+    total_qty = position.total_qty
+    p.close_position("KRW-ETH", price=1000, trade_date="2024-01-10")
+    assert p.cash == pytest.approx(70_000 + 1000 * total_qty)
+
+
+def test_can_afford_false_once_cash_runs_out():
+    p = Portfolio(position_size_krw=15_000, initial_cash=20_000)
+    assert p.can_afford() is True
+
+    p.open_position("KRW-ETH", price=1000, trade_date="2024-01-01")
+    assert p.cash == pytest.approx(5_000)
+    assert p.can_afford() is False  # 5,000 < position_size_krw (15,000)
