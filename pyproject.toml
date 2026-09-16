@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# Flat layout: the `strategy_engine` package lives at the repo root and is not
+# installed, so bare `pytest` (which, unlike `python -m pytest`, does not put
+# the CWD on sys.path) could not import it. `pythonpath = ["."]` makes both
+# invocations work from the repo root.
+pythonpath = ["."]
+testpaths = ["tests"]
