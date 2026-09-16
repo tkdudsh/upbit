@@ -9,23 +9,23 @@ def _df(closes, volumes=None):
 
 
 def test_has_reached_step_true_at_first_averaging_round():
-    # avg 1000, current 899 -> -10.1%, rounds_used=0 -> first averaging round threshold is -10%
-    assert averaging.has_reached_step(avg_price=1000, current_price=899, rounds_used=0) is True
+    # reference 1000, current 899 -> -10.1%, rounds_used=0 -> first averaging round threshold is -10%
+    assert averaging.has_reached_step(reference_price=1000, current_price=899, rounds_used=0) is True
 
 
 def test_has_reached_step_false_before_threshold():
-    assert averaging.has_reached_step(avg_price=1000, current_price=910, rounds_used=0) is False
+    assert averaging.has_reached_step(reference_price=1000, current_price=910, rounds_used=0) is False
 
 
 def test_has_reached_step_requires_next_step_for_second_round():
-    # after 1 round used, need -20% from original avg, not just -10%
-    assert averaging.has_reached_step(avg_price=1000, current_price=850, rounds_used=1) is False
-    assert averaging.has_reached_step(avg_price=1000, current_price=799, rounds_used=1) is True
+    # after 1 round used, need -20% from the original entry, not just -10%
+    assert averaging.has_reached_step(reference_price=1000, current_price=850, rounds_used=1) is False
+    assert averaging.has_reached_step(reference_price=1000, current_price=799, rounds_used=1) is True
 
 
 def test_has_reached_step_false_when_rounds_exhausted():
     # MAX_AVERAGING_ROUNDS = 3, rounds_used=3 means no more rounds allowed
-    assert averaging.has_reached_step(avg_price=1000, current_price=100, rounds_used=3) is False
+    assert averaging.has_reached_step(reference_price=1000, current_price=100, rounds_used=3) is False
 
 
 def test_is_support_alive_true_when_within_band_of_recent_low():
@@ -70,7 +70,7 @@ def test_averaging_allowed_composition_table():
              patch("strategy_engine.averaging.is_support_alive", return_value=support), \
              patch("strategy_engine.averaging.is_capitulation", return_value=capitulation), \
              patch("strategy_engine.regime.is_bear_market", return_value=bear):
-            return averaging.averaging_allowed(coin_df, btc_df, avg_price=1000, current_price=900, rounds_used=0)
+            return averaging.averaging_allowed(coin_df, btc_df, reference_price=1000, current_price=900, rounds_used=0)
 
     assert run_with() is True
     assert run_with(reached=False) is False

@@ -3,15 +3,21 @@ from . import config, indicators, regime
 
 
 def has_reached_step(
-    avg_price: float,
+    reference_price: float,
     current_price: float,
     rounds_used: int,
     step_pct: float = config.AVERAGING_STEP_PCT,
 ) -> bool:
+    # `reference_price` is the stable baseline the -10/-20/-30% ladder is
+    # measured from — engine.py passes Position.entry_price (the ORIGINAL
+    # entry, never recomputed), not the running weighted average. Passing a
+    # value that itself drops after each round (like avg_price) makes the
+    # ladder overshoot its documented envelope, since each round would then
+    # be chasing an already-lower target. See the Task 8 fix-wave history.
     if rounds_used >= config.MAX_AVERAGING_ROUNDS:
         return False
     required_drop = step_pct * (rounds_used + 1)
-    actual_drop = (avg_price - current_price) / avg_price
+    actual_drop = (reference_price - current_price) / reference_price
     return actual_drop >= required_drop
 
 
@@ -42,11 +48,11 @@ def is_capitulation(df: pd.DataFrame) -> bool:
 def averaging_allowed(
     coin_df: pd.DataFrame,
     btc_df: pd.DataFrame,
-    avg_price: float,
+    reference_price: float,
     current_price: float,
     rounds_used: int,
 ) -> bool:
-    if not has_reached_step(avg_price, current_price, rounds_used):
+    if not has_reached_step(reference_price, current_price, rounds_used):
         return False
     if not is_support_alive(coin_df):
         return False
