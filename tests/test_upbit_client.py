@@ -22,13 +22,16 @@ def test_get_krw_markets_filters_and_excludes_btc(mock_get):
 
 
 def _candle(date_str, o, h, l, c, v):
+    # Field names match Upbit's real /v1/candles/days response (snake_case),
+    # not the camelCase originally (incorrectly) assumed. See the NOTE in
+    # strategy_engine/upbit_client.py.
     return {
-        "candleDateTimeKST": date_str,
-        "openingPrice": o,
-        "highPrice": h,
-        "lowPrice": l,
-        "tradePrice": c,
-        "candleAccTradeVolume": v,
+        "candle_date_time_kst": date_str,
+        "opening_price": o,
+        "high_price": h,
+        "low_price": l,
+        "trade_price": c,
+        "candle_acc_trade_volume": v,
     }
 
 

@@ -31,18 +31,25 @@ def get_daily_candles(market: str, count: int, to: str | None = None) -> pd.Data
             break
         rows.extend(batch)
         remaining -= len(batch)
-        cursor = batch[-1]["candleDateTimeKST"]
+        cursor = batch[-1]["candle_date_time_kst"]
         if len(batch) < batch_size:
             break
 
     df = pd.DataFrame(rows)
+    # NOTE: Upbit's `/v1/candles/days` response uses snake_case field names
+    # (e.g. `candle_date_time_kst`, `opening_price`), not the camelCase names
+    # originally assumed here (`candleDateTimeKST`, `openingPrice`, ...).
+    # The unit tests in tests/test_upbit_client.py mocked the camelCase
+    # (incorrect) shape, so this went undetected until Task 13's first real
+    # network call against api.upbit.com raised `KeyError: 'candleDateTimeKST'`.
+    # Fixed here to match the real API; tests updated to match.
     df = df.rename(columns={
-        "candleDateTimeKST": "date",
-        "openingPrice": "open",
-        "highPrice": "high",
-        "lowPrice": "low",
-        "tradePrice": "close",
-        "candleAccTradeVolume": "volume",
+        "candle_date_time_kst": "date",
+        "opening_price": "open",
+        "high_price": "high",
+        "low_price": "low",
+        "trade_price": "close",
+        "candle_acc_trade_volume": "volume",
     })
     # NOTE: The brief specifies `pd.to_datetime(df["date"]).dt.normalize()`.
     # On this environment (Windows, pandas 3.0.4, numpy 2.2.6), that call
