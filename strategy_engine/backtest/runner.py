@@ -31,6 +31,12 @@ def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) 
     # Mark still-open positions to market at their last price as of end_date,
     # taken from the final iteration's already-sliced day_market_data. Without
     # this, metrics would only ever see take-profit exits — every one a winner.
+    # NOTE: a position whose market has no candle on end_date itself (e.g. it
+    # delisted before the backtest window closed) is silently excluded here —
+    # compute_metrics skips positions missing from current_prices — so its
+    # unrealized loss never reaches total_return_pct. Known gap; whether to
+    # force-close at the last known price on delisting is a strategy decision,
+    # not something this runner should decide unilaterally.
     final_prices = {
         market: df["close"].iloc[-1]
         for market, df in day_market_data.items()
