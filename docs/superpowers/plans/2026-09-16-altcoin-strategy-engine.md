@@ -514,7 +514,7 @@ git commit -m "feat: add strategy engine config constants"
 - Consumes: `indicators.sma`, `indicators.ma_slope`, `config.REGIME_MA_PERIOD`, `config.REGIME_SLOPE_LOOKBACK_DAYS`
 - Produces:
   - `regime.is_downtrend(df: pd.DataFrame, ma_period: int = config.REGIME_MA_PERIOD, slope_lookback: int = config.REGIME_SLOPE_LOOKBACK_DAYS) -> bool`
-  - `regime.is_bear_market(btc_df: pd.DataFrame, coin_df: pd.DataFrame) -> bool` (AND of `is_downtrend` on both)
+  - `regime.is_bear_market(btc_df: pd.DataFrame, coin_df: pd.DataFrame, ma_period: int = config.REGIME_MA_PERIOD, slope_lookback: int = config.REGIME_SLOPE_LOOKBACK_DAYS) -> bool` (AND of `is_downtrend` on both, with pass-through overrides so tests can use short fixtures)
 
 - [ ] **Step 1: Write failing tests**
 
@@ -544,10 +544,10 @@ def test_is_bear_market_requires_both_btc_and_coin_down():
     declining = _df_from_closes([50 - i for i in range(10)])
     rising = _df_from_closes([50 + i for i in range(10)])
 
-    assert regime.is_bear_market(declining, declining) is True
-    assert regime.is_bear_market(declining, rising) is False
-    assert regime.is_bear_market(rising, declining) is False
-    assert regime.is_bear_market(rising, rising) is False
+    assert regime.is_bear_market(declining, declining, ma_period=3, slope_lookback=2) is True
+    assert regime.is_bear_market(declining, rising, ma_period=3, slope_lookback=2) is False
+    assert regime.is_bear_market(rising, declining, ma_period=3, slope_lookback=2) is False
+    assert regime.is_bear_market(rising, rising, ma_period=3, slope_lookback=2) is False
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -574,8 +574,13 @@ def is_downtrend(
     return bool(close.iloc[-1] < ma.iloc[-1] and slope.iloc[-1] < 0)
 
 
-def is_bear_market(btc_df: pd.DataFrame, coin_df: pd.DataFrame) -> bool:
-    return is_downtrend(btc_df) and is_downtrend(coin_df)
+def is_bear_market(
+    btc_df: pd.DataFrame,
+    coin_df: pd.DataFrame,
+    ma_period: int = config.REGIME_MA_PERIOD,
+    slope_lookback: int = config.REGIME_SLOPE_LOOKBACK_DAYS,
+) -> bool:
+    return is_downtrend(btc_df, ma_period, slope_lookback) and is_downtrend(coin_df, ma_period, slope_lookback)
 ```
 
 Note: the test cases pass `ma_period=3, slope_lookback=2` explicitly, so `is_downtrend`'s defaults (60/5) are never exercised by this test with only 10 rows — that's intentional; the defaults are exercised end-to-end in Task 9's engine tests with longer synthetic data.
