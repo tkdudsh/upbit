@@ -36,5 +36,5 @@ def compute_metrics(closed_trades: list, open_positions=(), current_prices=None)
         "unrealized_pnl": float(unrealized_pnl),
         "total_pnl": float(total_pnl),
         "win_rate": (wins / len(closed_trades)) if closed_trades else 0.0,
-        "total_return_pct": (total_pnl / total_invested) if total_invested else 0.0,
+        "total_return_pct": float(total_pnl / total_invested) if total_invested else 0.0,
     }
