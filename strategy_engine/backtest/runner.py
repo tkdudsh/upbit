@@ -11,6 +11,7 @@ def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) 
     all_actions = []
 
     dates = [d for d in btc_df.index if start_date <= d <= end_date]
+    day_market_data = {}
 
     for trade_date in dates:
         btc_slice = btc_df.loc[:trade_date]
@@ -22,8 +23,21 @@ def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) 
         actions = run_daily_cycle(portfolio, day_market_data, btc_slice, trade_date)
         all_actions.extend(actions)
 
+    # Mark still-open positions to market at their last price as of end_date,
+    # taken from the final iteration's already-sliced day_market_data. Without
+    # this, metrics would only ever see take-profit exits — every one a winner.
+    final_prices = {
+        market: df["close"].iloc[-1]
+        for market, df in day_market_data.items()
+        if market in portfolio.positions
+    }
+
     return {
         "actions": all_actions,
-        "metrics": compute_metrics(portfolio.closed_trades),
+        "metrics": compute_metrics(
+            portfolio.closed_trades,
+            open_positions=list(portfolio.positions.values()),
+            current_prices=final_prices,
+        ),
         "open_positions": list(portfolio.positions.keys()),
     }
