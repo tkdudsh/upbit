@@ -71,6 +71,28 @@ def test_new_entry_when_nothing_to_take_profit_or_average():
     assert {"type": "entry", "market": "KRW-ETH"} in actions
 
 
+def test_held_market_missing_from_market_data_is_skipped_not_crashed():
+    # A delisted/halted market has no candle for this date, so the runner omits
+    # it from day_market_data even though the position is still held.
+    portfolio = Portfolio(position_size_krw=100_000)
+    portfolio.open_position("KRW-DEAD", price=1000, trade_date="d0")
+    market_data = {"KRW-ETH": _df()}
+
+    with patch("strategy_engine.engine.is_take_profit", return_value=True) as mock_tp, \
+         patch("strategy_engine.engine.averaging_allowed", return_value=True) as mock_avg, \
+         patch("strategy_engine.engine.entry_allowed", return_value=False), \
+         patch("strategy_engine.engine.is_downtrend", return_value=True) as mock_dt:
+        actions = engine.run_daily_cycle(portfolio, market_data, _df(), trade_date="d1")
+
+    # Still held, untouched: no stale-price take-profit, averaging or warning.
+    assert portfolio.is_held("KRW-DEAD") is True
+    assert portfolio.positions["KRW-DEAD"].rounds_used == 0
+    assert actions == []
+    mock_tp.assert_not_called()
+    mock_avg.assert_not_called()
+    mock_dt.assert_not_called()
+
+
 def test_danger_warning_flagged_for_held_position_in_individual_downtrend():
     portfolio = Portfolio(position_size_krw=100_000)
     portfolio.open_position("KRW-ETH", price=1000, trade_date="d0")

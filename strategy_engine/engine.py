@@ -22,6 +22,11 @@ def run_daily_cycle(
     closed_this_cycle = set()
 
     for market in list(portfolio.positions.keys()):
+        # A held market can be absent from today's data (halted, delisted, or
+        # simply no candle for this date). Skip it rather than crash the whole
+        # cycle, and never act on a stale price.
+        if market not in market_data:
+            continue
         df = market_data[market]
         position = portfolio.positions[market]
         current_price = df["close"].iloc[-1]
@@ -32,6 +37,8 @@ def run_daily_cycle(
 
     averaged_any = False
     for market in list(portfolio.positions.keys()):
+        if market not in market_data:
+            continue
         df = market_data[market]
         position = portfolio.positions[market]
         current_price = df["close"].iloc[-1]
@@ -57,6 +64,8 @@ def run_daily_cycle(
 
     # Informational only — never blocks or forces a sell (prompt/strategy_topic.md §3-2, signal 5)
     for market in portfolio.positions:
+        if market not in market_data:
+            continue
         if is_downtrend(market_data[market]):
             actions.append({"type": "danger_warning", "market": market})
 

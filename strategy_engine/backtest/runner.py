@@ -15,10 +15,15 @@ def run_backtest(btc_df: pd.DataFrame, market_data: dict, start_date, end_date) 
 
     for trade_date in dates:
         btc_slice = btc_df.loc[:trade_date]
+        # `not df.loc[:trade_date].empty` only excluded markets that had not
+        # started trading yet: a delisted/halted market keeps a non-empty prefix
+        # forever, so the engine went on reading its last-ever close as "today's
+        # price" indefinitely — including opening new positions in a dead
+        # market. Require an actual candle on this exact date instead.
         day_market_data = {
             market: df.loc[:trade_date]
             for market, df in market_data.items()
-            if not df.loc[:trade_date].empty
+            if trade_date in df.index
         }
         actions = run_daily_cycle(portfolio, day_market_data, btc_slice, trade_date)
         all_actions.extend(actions)
