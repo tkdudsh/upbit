@@ -14,6 +14,12 @@ def run_daily_cycle(
     trade_date,
 ) -> list:
     actions = []
+    # Markets closed by take-profit in THIS cycle. Once closed, is_held() goes
+    # False, so without this the entry scan below would re-evaluate the very
+    # same market and could re-buy it at the identical close it was just sold
+    # at. This is a per-market skip, independent of the whole-scan "something
+    # was averaged" rule.
+    closed_this_cycle = set()
 
     for market in list(portfolio.positions.keys()):
         df = market_data[market]
@@ -21,6 +27,7 @@ def run_daily_cycle(
         current_price = df["close"].iloc[-1]
         if is_take_profit(position.avg_price, current_price):
             trade = portfolio.close_position(market, current_price, trade_date)
+            closed_this_cycle.add(market)
             actions.append({"type": "take_profit", "market": market, "trade": trade})
 
     averaged_any = False
@@ -36,6 +43,8 @@ def run_daily_cycle(
     if not averaged_any:
         for market, df in market_data.items():
             if portfolio.is_held(market):
+                continue
+            if market in closed_this_cycle:
                 continue
             if entry_allowed(df):
                 current_price = df["close"].iloc[-1]

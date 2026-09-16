@@ -39,6 +39,25 @@ def test_averaging_skips_new_entry_scan_this_cycle():
     assert {"type": "averaging", "market": "KRW-ETH"} in actions
 
 
+def test_take_profit_market_is_not_re_entered_in_the_same_cycle():
+    portfolio = Portfolio(position_size_krw=100_000)
+    portfolio.open_position("KRW-ETH", price=1000, trade_date="d0")
+    market_data = {"KRW-ETH": _df(), "KRW-XRP": _df()}
+
+    with patch("strategy_engine.engine.is_take_profit", return_value=True), \
+         patch("strategy_engine.engine.averaging_allowed", return_value=False), \
+         patch("strategy_engine.engine.entry_allowed", return_value=True), \
+         patch("strategy_engine.engine.is_downtrend", return_value=False):
+        actions = engine.run_daily_cycle(portfolio, market_data, _df(), trade_date="d1")
+
+    # sold this cycle -> must not be bought back at the same close
+    assert portfolio.is_held("KRW-ETH") is False
+    assert {"type": "entry", "market": "KRW-ETH"} not in actions
+    # other markets are still open to new entries as normal
+    assert portfolio.is_held("KRW-XRP") is True
+    assert {"type": "entry", "market": "KRW-XRP"} in actions
+
+
 def test_new_entry_when_nothing_to_take_profit_or_average():
     portfolio = Portfolio(position_size_krw=100_000)
     market_data = {"KRW-ETH": _df()}
