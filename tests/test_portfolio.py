@@ -1,5 +1,6 @@
 import pytest
-from strategy_engine.portfolio import Portfolio
+from strategy_engine import config
+from strategy_engine.portfolio import ClosedTrade, Portfolio
 
 
 def test_open_position_sets_avg_price_and_qty():
@@ -55,4 +56,28 @@ def test_close_position_records_closed_trade_and_removes_position():
 
     assert p.is_held("KRW-ETH") is False
     assert trade in p.closed_trades
-    assert trade.pnl == pytest.approx(11111.11, abs=0.5)
+    # qty = 100 + 1000/9 = 211.1111..., avg = 200000/211.1111 = 947.3684...
+    # gross = 1000 * 211.1111 - 200000                        = 11111.111
+    # fees  = (200000 + 211111.111) * 0.0005                  =   205.556
+    # net                                                     = 10905.556
+    assert trade.pnl == pytest.approx(10905.556, abs=0.01)
+
+
+def test_pnl_nets_out_round_trip_fees():
+    trade = ClosedTrade(
+        market="KRW-ETH", avg_price=1000, exit_price=1050, qty=100,
+        entry_date="d0", exit_date="d1",
+    )
+    # gross = (1050-1000)*100 = 5000
+    # fees  = (1000*100 + 1050*100) * 0.0005 = 205000 * 0.0005 = 102.5
+    assert trade.pnl == pytest.approx(5000 - 102.5)
+    assert config.FEE_RATE == 0.0005
+
+
+def test_pnl_can_be_negative_purely_from_fees():
+    # Flat round trip: no price move, but the fees still cost money.
+    trade = ClosedTrade(
+        market="KRW-ETH", avg_price=1000, exit_price=1000, qty=100,
+        entry_date="d0", exit_date="d1",
+    )
+    assert trade.pnl == pytest.approx(-(200000 * 0.0005))

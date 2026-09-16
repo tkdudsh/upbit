@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from . import config
+
 
 @dataclass
 class Position:
@@ -43,7 +45,10 @@ class ClosedTrade:
 
     @property
     def pnl(self) -> float:
-        return (self.exit_price - self.avg_price) * self.qty
+        """Net P&L after round-trip exchange fees (buy leg + sell leg)."""
+        gross = (self.exit_price - self.avg_price) * self.qty
+        fees = (self.avg_price * self.qty + self.exit_price * self.qty) * config.FEE_RATE
+        return gross - fees
 
 
 class Portfolio:

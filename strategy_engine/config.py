@@ -34,6 +34,14 @@ CAPITULATION_VOLUME_MULTIPLIER = 2.0   # a down day with 2x+ avg volume blocks a
 # --- Exit ---
 TAKE_PROFIT_PCT = 0.05
 
+# --- Trading costs ---
+# ASSUMPTION, VERIFY against Upbit's current fee schedule before trusting any
+# backtest P&L: Upbit's KRW spot taker fee is approximately 0.05% per side.
+# Applied to both the buy and the sell leg in ClosedTrade.pnl, so a round trip
+# costs roughly 0.1% — material against a +5% take-profit target. Slippage is
+# not modelled separately; widen this constant to approximate it.
+FEE_RATE = 0.0005
+
 # --- Backtest position sizing (percentage-based strategy, so this only scales
 # reported KRW P&L, not returns) ---
 POSITION_SIZE_KRW = 100_000
